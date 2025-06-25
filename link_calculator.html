@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>地空测控链路计算模型</title>
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --light-color: #f8f9fa;
+            --dark-color: #343a40;
+            --border-color: #dee2e6;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+            margin: 0;
+            padding: 20px;
+            background-color: var(--light-color);
+            color: var(--dark-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        header, footer {
+            width: 100%;
+            max-width: 1200px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        header h1 {
+            color: var(--primary-color);
+        }
+
+        footer {
+            margin-top: 30px;
+            font-size: 0.9em;
+            color: var(--secondary-color);
+        }
+
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            padding: 25px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+        }
+
+        .card h2 {
+            margin-top: 0;
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 10px;
+        }
+        
+        fieldset {
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        legend {
+            font-weight: bold;
+            color: var(--secondary-color);
+            padding: 0 10px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .form-group label {
+            flex: 1 1 200px;
+            font-weight: 500;
+            margin-right: 10px;
+        }
+
+        .form-group input, .form-group select {
+            flex: 2 1 250px;
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #ced4da;
+            font-size: 1em;
+        }
+        
+        .unit {
+            margin-left: 10px;
+            color: var(--secondary-color);
+        }
+
+        #calculateBtn {
+            width: 100%;
+            padding: 12px;
+            font-size: 1.2em;
+            font-weight: bold;
+            color: white;
+            background-color: var(--primary-color);
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        #calculateBtn:hover {
+            background-color: #0056b3;
+        }
+
+        #results h3 {
+            color: var(--secondary-color);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+        }
+
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 5px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .result-item:last-child {
+            border-bottom: none;
+        }
+
+        .result-label {
+            font-weight: 500;
+        }
+
+        .result-value {
+            font-weight: bold;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        #statusMessage {
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 1.1em;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .status-connected {
+            color: #155724;
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-interrupted {
+            color: #721c24;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+        }
+
+        @media (max-width: 992px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>地空测控链路计算模型</h1>
+        <p>根据《地空测控链路计算模型 v2.0》文档实现的交互式计算器</p>
+    </header>
+
+    <div class="container">
+        <div class="card" id="input-card">
+            <h2>输入参数</h2>
+            <form id="linkForm">
+                <fieldset>
+                    <legend>位置与动态参数</legend>
+                    <div class="form-group">
+                        <label for="gcsAltitude">地面站天线高度 (h₁)</label>
+                        <input type="number" id="gcsAltitude" value="20">
+                        <span class="unit">米</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="uavAltitude">无人机飞行高度 (h₂)</label>
+                        <input type="number" id="uavAltitude" value="2000">
+                        <span class="unit">米</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="uavSpeed">无人机相对速度 (v)</label>
+                        <input type="number" id="uavSpeed" value="150">
+                        <span class="unit">米/秒</span>
+                    </div>
+                     <div class="form-group">
+                        <label for="linkDistance">当前链路距离 (D)</label>
+                        <input type="number" id="linkDistance" value="100">
+                        <span class="unit">公里</span>
+                    </div>
+                </fieldset>
+
+                <fieldset>
+                    <legend>射频参数</legend>
+                     <div class="form-group">
+                        <label for="frequency">载波频率 (f)</label>
+                        <input type="number" id="frequency" value="2400">
+                        <span class="unit">MHz</span>
+                    </div>
+                     <div class="form-group">
+                        <label for="txEIRP">发射机 EIRP</label>
+                        <input type="number" id="txEIRP" value="30">
+                        <span class="unit">dBW</span>
+                    </div>
+                     <div class="form-group">
+                        <label for="rxGain">接收天线增益 (Gᵣ)</label>
+                        <input type="number" id="rxGain" value="12">
+                        <span class="unit">dBi</span>
+                    </div>
+                     <div class="form-group">
+                        <label for="rxNoiseFigure">接收机噪声系数 (Nꜰ)</label>
+                        <input type="number" id="rxNoiseFigure" value="4">
+                        <span class="unit">dB</span>
+                    </div>
+                     <div class="form-group">
+                        <label for="bitRate">传输速率 (Rᵦ)</label>
+                        <input type="number" id="bitRate" value="2000000">
+                        <span class="unit">bps</span>
+                    </div>
+                </fieldset>
+                
+                <fieldset>
+                    <legend>系统与环境参数</legend>
+                    <div class="form-group">
+                        <label for="modulation">调制方式</label>
+                        <select id="modulation">
+                            <option value="BPSK" selected>BPSK (2PSK)</option>
+                            <option value="DPSK">DPSK</option>
+                            <option value="COHERENT_2FSK">相干 2FSK</option>
+                            <option value="COHERENT_2ASK">相干 2ASK</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="weather">天气状况</label>
+                        <select id="weather">
+                            <option value="CLEAR" selected>晴天</option>
+                            <option value="MODERATE_RAIN">中雨 (10mm/h)</option>
+                            <option value="HEAVY_RAIN">大雨 (25mm/h)</option>
+                        </select>
+                    </div>
+                     <div class="form-group">
+                        <label for="maxBER">最大允许误码率 (BER)</label>
+                        <input type="text" id="maxBER" value="1e-5">
+                    </div>
+                     <div class="form-group">
+                        <label for="otherLosses">其他损耗 (L₀)</label>
+                        <input type="number" id="otherLosses" value="5">
+                        <span class="unit">dB</span>
+                    </div>
+                </fieldset>
+                
+                <button type="button" id="calculateBtn">开始计算</button>
+            </form>
+        </div>
+
+        <div class="card" id="output-card">
+            <h2>计算结果</h2>
+            <div id="statusMessage">请填写参数并点击计算</div>
+            <div id="results">
+                <h3>连通性分析</h3>
+                <div class="result-item">
+                    <span class="result-label">最大视距</span>
+                    <span class="result-value" id="resMaxLos">--- km</span>
+                </div>
+                 <div class="result-item">
+                    <span class="result-label">总传播损耗</span>
+                    <span class="result-value" id="resTotalLoss">--- dB</span>
+                </div>
+                 <div class="result-item">
+                    <span class="result-label">接收信号功率</span>
+                    <span class="result-value" id="resRxPower">--- dBW</span>
+                </div>
+                 <div class="result-item">
+                    <span class="result-label">接收机灵敏度</span>
+                    <span class="result-value" id="resSensitivity">--- dBW</span>
+                </div>
+                 <div class="result-item">
+                    <span class="result-label">信道相干时间</span>
+                    <span class="result-value" id="resCoherenceTime">--- ms</span>
+                </div>
+                 <div class="result-item">
+                    <span class="result-label">多普勒效应要求的最低速率</span>
+                    <span class="result-value" id="resMinDopplerRate">--- Mbps</span>
+                </div>
+
+                <h3>核心性能指标</h3>
+                 <div class="result-item">
+                    <span class="result-label">最大有效通信距离</span>
+                    <span class="result-value" id="resMaxDistance">--- km</span>
+                </div>
+                 <div class="result-item">
+                    <span class="result-label">最大有效传输速率</span>
+                    <span class="result-value" id="resMaxRate">--- Mbps</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <footer>
+        <p>该模型计算器基于《地空测控链路计算模型 v2.0》文档。所有计算均在本地浏览器中完成。</p>
+    </footer>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // --- 常量定义 ---
+    const SPEED_OF_LIGHT = 299792458.0;
+    const BOLTZMANN_CONSTANT = 1.380649e-23;
+    const STANDARD_NOISE_TEMP = 290.0;
+    const M_FACTOR_DOPPLER = 150.0;
+    const LOS_FACTOR_STD_REFRACTION = 4.12;
+
+    // --- DOM 元素获取 ---
+    const calculateBtn = document.getElementById('calculateBtn');
+    const form = document.getElementById('linkForm');
+
+    // --- 计算器类 ---
+    class UAVLinkCalculator {
+        constructor(params) {
+            this.params = params;
+            this.results = {}; // 用于存储结果的对象
+        }
+
+        // --- 核心计算逻辑，移植自 C++ 代码 ---
+
+        // 依据文档 3.1 节
+        calculateMaxLineOfSight() {
+            return LOS_FACTOR_STD_REFRACTION * (Math.sqrt(this.params.gcsAltitude) + Math.sqrt(this.params.uavAltitude));
+        }
+
+        // 依据文档 3.2.1 节
+        calculateFreeSpacePathLoss(distance_km) {
+            if (distance_km <= 0) return 0;
+            return 20.0 * Math.log10(distance_km) + 20.0 * Math.log10(this.params.frequency) + 32.45;
+        }
+
+        // 依据文档 3.2.2 节
+        calculateAtmosphericAbsorptionLoss(distance_km) {
+            let gamma_o, gamma_w;
+            // 简化模型，使用表格中的代表值
+            gamma_o = 0.007; // 氧气在 2.4GHz 附近的典型值
+            switch(this.params.weather) {
+                case 'HEAVY_RAIN': gamma_w = 0.004; break;
+                case 'MODERATE_RAIN': gamma_w = 0.002; break;
+                default: gamma_w = 0.0003;
+            }
+            return (gamma_o + gamma_w) * distance_km;
+        }
+
+        // 依据文档 3.2.3 节
+        calculateRainAttenuation(distance_km) {
+            let R = 0.0;
+            switch (this.params.weather) {
+                case 'MODERATE_RAIN': R = 10.0; break;
+                case 'HEAVY_RAIN': R = 25.0; break;
+                default: return 0.0;
+            }
+            let k, alpha;
+            // 简化模型，使用表格中的代表值
+            if (this.params.frequency >= 1000 && this.params.frequency < 3000) {
+                k = 0.000650; alpha = 1.121;
+            } else if (this.params.frequency >= 8000 && this.params.frequency < 11000) {
+                k = 0.0188; alpha = 1.217;
+            } else {
+                k = 0.000650; alpha = 1.121;
+            }
+            const gamma_R = k * Math.pow(R, alpha);
+            return gamma_R * distance_km;
+        }
+        
+        // 依据文档 3.2 节
+        calculateTotalPropagationLoss(distance_km) {
+            const l_fs = this.calculateFreeSpacePathLoss(distance_km);
+            const l_a = this.calculateAtmosphericAbsorptionLoss(distance_km);
+            const l_r = this.calculateRainAttenuation(distance_km);
+            return l_fs + l_a + l_r + this.params.otherLosses;
+        }
+
+        // 依据文档 3.3.1 节
+        calculateReceivedPower(totalLoss_dB) {
+            return this.params.txEIRP + this.params.rxGain - totalLoss_dB;
+        }
+
+        // 依据文档 3.6 节
+        calculateMaxDopplerShift() {
+            const wavelength = SPEED_OF_LIGHT / (this.params.frequency * 1e6);
+            return this.params.uavSpeed / wavelength;
+        }
+
+        calculateCoherenceTime(maxDopplerShift) {
+            if (maxDopplerShift <= 0) return Infinity;
+            return 0.423 / maxDopplerShift;
+        }
+        
+        // 依据文档 3.4.2 节
+        Q_inv(p) {
+            if (p <= 0.0 || p >= 1.0) return Infinity;
+            if (p > 0.5) return -this.Q_inv(1.0 - p);
+            const t = Math.sqrt(-2.0 * Math.log(p));
+            const c0 = 2.515517, c1 = 0.802853, c2 = 0.010328;
+            const d1 = 1.432788, d2 = 0.189269, d3 = 0.001308;
+            return t - (c0 + c1 * t + c2 * t * t) / (1 + d1 * t + d2 * t * t + d3 * t * t * t);
+        }
+
+        calculateThresholdSnrFromBer() {
+            const P_b = this.params.maxBER;
+            let EbN0_linear = 0;
+            switch (this.params.modulation) {
+                case 'BPSK':
+                case 'COHERENT_2ASK':
+                    EbN0_linear = Math.pow(this.Q_inv(P_b), 2) / 2.0;
+                    break;
+                case 'DPSK':
+                    if (P_b >= 0.5) return Infinity;
+                    EbN0_linear = -Math.log(2.0 * P_b);
+                    break;
+                case 'COHERENT_2FSK':
+                    EbN0_linear = Math.pow(this.Q_inv(P_b), 2);
+                    break;
+                default:
+                    throw new Error("Unsupported modulation type");
+            }
+            return EbN0_linear;
+        }
+        
+        // 依据文档 3.4.3 节
+        calculateReceiverSensitivity() {
+            const B_Hz = this.params.bitRate;
+            const NF_linear = Math.pow(10, this.params.rxNoiseFigure / 10.0);
+            const Ni_watts = BOLTZMANN_CONSTANT * STANDARD_NOISE_TEMP * B_Hz * NF_linear;
+            const snr_th_linear = this.calculateThresholdSnrFromBer();
+            const Si_th_watts = Ni_watts * snr_th_linear;
+            return 10.0 * Math.log10(Si_th_watts);
+        }
+
+        // 依据文档 4.2 节
+        findMaxEffectiveDistance(sensitivity_dBW, requiredRateVsDoppler_bps) {
+            if (this.params.bitRate <= requiredRateVsDoppler_bps) {
+                return 0.0;
+            }
+            const d_los = this.results.maxLineOfSight_km;
+            let low = 0.0, high = d_los, d_snr = 0.0;
+            for (let i = 0; i < 100; i++) {
+                let mid = low + (high - low) / 2.0;
+                let loss = this.calculateTotalPropagationLoss(mid);
+                let p_r = this.calculateReceivedPower(loss);
+                if (p_r >= sensitivity_dBW) {
+                    d_snr = mid;
+                    low = mid;
+                } else {
+                    high = mid;
+                }
+            }
+            return Math.min(d_los, d_snr);
+        }
+
+        // 依据文档 4.2 节
+        findMaxEffectiveRate(receivedPower_dBW, requiredRateVsDoppler_bps) {
+            const p_r_linear = Math.pow(10, receivedPower_dBW / 10.0);
+            const NF_linear = Math.pow(10, this.params.rxNoiseFigure / 10.0);
+            const r_th_linear = this.calculateThresholdSnrFromBer();
+            const denominator = BOLTZMANN_CONSTANT * STANDARD_NOISE_TEMP * NF_linear * r_th_linear;
+            if (denominator === 0) return 0;
+            const max_rate_snr = p_r_linear / denominator;
+            return max_rate_snr > requiredRateVsDoppler_bps ? max_rate_snr : 0;
+        }
+
+        // --- 主分析流程 ---
+        runFullAnalysis() {
+            this.results.maxLineOfSight_km = this.calculateMaxLineOfSight();
+            
+            const f_m = this.calculateMaxDopplerShift();
+            this.results.coherenceTime_s = this.calculateCoherenceTime(f_m);
+            this.results.requiredRateVsDoppler_bps = M_FACTOR_DOPPLER / this.results.coherenceTime_s;
+
+            if (this.params.linkDistance > this.results.maxLineOfSight_km) {
+                this.results.isConnected = false;
+                this.results.statusMessage = "链路中断：超出最大视距范围。";
+                return;
+            }
+
+            this.results.totalPropagationLoss_dB = this.calculateTotalPropagationLoss(this.params.linkDistance);
+            this.results.receivedPower_dBW = this.calculateReceivedPower(this.results.totalPropagationLoss_dB);
+            this.results.receiverSensitivity_dBW = this.calculateReceiverSensitivity();
+
+            if (this.results.receivedPower_dBW < this.results.receiverSensitivity_dBW) {
+                this.results.isConnected = false;
+                this.results.statusMessage = "链路中断：接收信号功率低于接收机灵敏度。";
+            } else if (this.params.bitRate <= this.results.requiredRateVsDoppler_bps) {
+                this.results.isConnected = false;
+                this.results.statusMessage = "链路中断：传输速率过低，无法适应信道时变性（快衰落）。";
+            } else {
+                this.results.isConnected = true;
+                this.results.statusMessage = "链路连通。";
+            }
+
+            // 无论当前链路是否连通，都计算理论上的最大值
+            this.results.maxEffectiveDistance_km = this.findMaxEffectiveDistance(this.results.receiverSensitivity_dBW, this.results.requiredRateVsDoppler_bps);
+            this.results.maxEffectiveRate_bps = this.findMaxEffectiveRate(this.results.receivedPower_dBW, this.results.requiredRateVsDoppler_bps);
+        }
+    }
+
+    // --- 事件处理与UI更新 ---
+    function runCalculation() {
+        try {
+            // 1. 从表单获取参数
+            const params = {
+                gcsAltitude: parseFloat(document.getElementById('gcsAltitude').value),
+                uavAltitude: parseFloat(document.getElementById('uavAltitude').value),
+                uavSpeed: parseFloat(document.getElementById('uavSpeed').value),
+                linkDistance: parseFloat(document.getElementById('linkDistance').value),
+                frequency: parseFloat(document.getElementById('frequency').value),
+                txEIRP: parseFloat(document.getElementById('txEIRP').value),
+                rxGain: parseFloat(document.getElementById('rxGain').value),
+                rxNoiseFigure: parseFloat(document.getElementById('rxNoiseFigure').value),
+                bitRate: parseFloat(document.getElementById('bitRate').value),
+                modulation: document.getElementById('modulation').value,
+                weather: document.getElementById('weather').value,
+                maxBER: parseFloat(document.getElementById('maxBER').value),
+                otherLosses: parseFloat(document.getElementById('otherLosses').value)
+            };
+
+            // 2. 创建计算器实例并运行
+            const calculator = new UAVLinkCalculator(params);
+            calculator.runFullAnalysis();
+            const res = calculator.results;
+
+            // 3. 更新UI显示结果
+            const statusDiv = document.getElementById('statusMessage');
+            statusDiv.textContent = res.statusMessage;
+            statusDiv.className = res.isConnected ? 'status-connected' : 'status-interrupted';
+
+            document.getElementById('resMaxLos').textContent = `${res.maxLineOfSight_km.toFixed(3)} km`;
+            document.getElementById('resTotalLoss').textContent = `${res.totalPropagationLoss_dB.toFixed(3)} dB`;
+            document.getElementById('resRxPower').textContent = `${res.receivedPower_dBW.toFixed(3)} dBW`;
+            document.getElementById('resSensitivity').textContent = `${res.receiverSensitivity_dBW.toFixed(3)} dBW`;
+            document.getElementById('resCoherenceTime').textContent = `${(res.coherenceTime_s * 1000).toFixed(3)} ms`;
+            document.getElementById('resMinDopplerRate').textContent = `${(res.requiredRateVsDoppler_bps / 1e6).toFixed(3)} Mbps`;
+            document.getElementById('resMaxDistance').textContent = `${res.maxEffectiveDistance_km.toFixed(3)} km`;
+            document.getElementById('resMaxRate').textContent = `${(res.maxEffectiveRate_bps / 1e6).toFixed(3)} Mbps`;
+
+        } catch (error) {
+            const statusDiv = document.getElementById('statusMessage');
+            statusDiv.textContent = `计算出错: ${error.message}`;
+            statusDiv.className = 'status-interrupted';
+            console.error(error);
+        }
+    }
+    
+    // 页面加载后先计算一次默认值
+    runCalculation();
+
+    // 绑定按钮点击事件
+    calculateBtn.addEventListener('click', runCalculation);
+    
+    // 让回车键也能触发计算
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        runCalculation();
+    });
+});
+</script>
+
+</body>
+</html>
