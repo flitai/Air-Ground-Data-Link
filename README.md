@@ -12,7 +12,7 @@
 
 -----
 
-### 如何编译和运行
+### 编译和运行
 
 为了编译这个项目，需要一个C++编译器（例如 g++）。将以上所有四个代码文件（`LinkConstants.h`, `LinkParameters.h`, `UAVLinkCalculator.h`, `UAVLinkCalculator.cpp`, `main.cpp`）放置在同一个目录下，然后在终端中执行以下命令：
 
